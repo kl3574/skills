@@ -1,0 +1,421 @@
+diff --git a/skills/engineering/ask-matt/PHASE-BOUNDARIES.md b/skills/engineering/ask-matt/PHASE-BOUNDARIES.md
+index fb58ef9..6d79b8c 100644
+--- a/skills/engineering/ask-matt/PHASE-BOUNDARIES.md
++++ b/skills/engineering/ask-matt/PHASE-BOUNDARIES.md
+@@ -12,13 +12,13 @@ The **phase boundary** is the gap between two phases, and it is the only place t
+ | **`/clear`** | Empty the context window and start from nothing.                  |
+ | **`/handoff`** | Write a portable markdown file and seed a session anywhere with it. |
+ | **Subagent** | Send the task to its own context window and get a report back.     |
+-| **`/compact`** | Compress this context and seed a fresh session with the summary.  |
++| **`/compact`** | Compress context within the current session using a summary.     |
+ 
+ ## The tree
+ 
+ Work top to bottom at the boundary. The first **yes** wins.
+ 
+-**1. Can you continue in this session?** Two things make the answer yes: the next phase needs this phase as a **primary source**, or you have enough [smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone) left (~150k tokens) for the next phase to fit. Grilling → implementation is the standard yes: the implementation wants the reasoning verbatim, not a summary of it. Continue costs nothing and loses nothing, so rule it out before anything else.
++**1. Can you continue in this session?** Two things make the answer yes: the next phase needs this phase as a **primary source**, or the active model has enough [smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone) left for the next phase to fit. Check `/usage` and the active model's actual limits rather than assuming a fixed token count. Grilling → implementation is the standard yes: the implementation wants the reasoning verbatim, not a summary of it. Continue costs nothing and loses nothing, so rule it out before anything else.
+ 
+ **2. Is the context irrelevant to what comes next?** Is everything in this session (the exploration, the decisions, the dead ends) disposable? If so, **`/clear`**. It is the cheapest move on the board: it takes no time and hands back the whole window. `/clear` also isn't terminal: the old session stays resumable.
+ 
+@@ -37,7 +37,7 @@ That list is the whole clause. What `/handoff` buys is **portability**: a file t
+ 
+ **5. Otherwise, `/compact`.** Relevant context, same harness, same directory, and you need to stay in the loop: this is where the tree lands, and it lands here often. Pass it an instruction (`/compact we're going to QA this area`) so the summary keeps what the next phase needs.
+ 
+-`/compact` is the **default, not the first reach**. It sits at the bottom because the four questions above it are all cheaper or more precise. The failure mode when people start here is a fresh session that is confidently wrong about a decision the summary flattened.
++`/compact` is the **default, not the first reach**. It sits at the bottom because the four questions above it are all cheaper or more precise. The failure mode when people start here is a post-compaction context that is confidently wrong about a decision the summary flattened.
+ 
+ ## Primary and secondary sources
+ 
+diff --git a/skills/engineering/ask-matt/SKILL.md b/skills/engineering/ask-matt/SKILL.md
+index 4bfeeb6..d4dd383 100644
+--- a/skills/engineering/ask-matt/SKILL.md
++++ b/skills/engineering/ask-matt/SKILL.md
+@@ -10,6 +10,8 @@ You don't remember every skill, so ask.
+ 
+ Before stating what a skill does or recommending a step be skipped, read that skill's SKILL.md: the summaries here are for orientation only.
+ 
++For Kimi Code, skills named here can be invoked as `/skill:<name>`; the `/<name>` shorthand is valid when unambiguous. `/clear` and `/compact` remain built-in session commands. For subagent routes, use [the subagent adapter](../../../kimi-code/adapters/subagents.md).
++
+ A **flow** is a path through the skills. Most paths run along one **main flow**, and two **on-ramps** merge onto it. Everything else is standalone, or a vocabulary layer that runs underneath.
+ 
+ ## The main flow: idea → ship
+@@ -37,7 +39,7 @@ The route most work travels. You have an idea and want it built.
+ 
+ Keep steps 1–3 in **one unbroken context window** (don't compact or clear until after `/to-tickets`) so the grilling, spec, and tickets all build on the same thinking. Each `/implement` then starts fresh, working from the ticket. Run `/retro` in the session it's looking back on, before you clear; after clearing, point it at that session's log instead.
+ 
+-The limit on this is the **[smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone)**: the window (~150k tokens on state-of-the-art models) within which the model still reasons sharply. If a session approaches it before `/to-tickets`, don't push on degraded; `/compact` at the nearest phase boundary and carry on (see Phase boundaries).
++The limit on this is the **[smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone)**: the portion of the current model's context window within which it still reasons sharply. Check `/usage` and the active model's actual limits instead of assuming a fixed token count. If the session approaches degraded reasoning before `/to-tickets`, `/compact` at the nearest phase boundary and carry on in the current session (see Phase boundaries).
+ 
+ ## On-ramps
+ 
+@@ -74,7 +76,7 @@ A **phase** is a chunk of work inside a session: the grilling, the implementatio
+ - **`/clear`**: empty the window, when nothing here matters to what's next.
+ - **`/handoff`** writes a portable markdown file. Narrow: only for a **new harness**, a **new directory**, a **colleague**, or forking a side task **mid-phase**. What it buys is portability.
+ - **Subagent**: send a tightly-scoped task to its own window and get a report back.
+-- **`/compact`** compresses this context and seeds a fresh session with it. The **default**, at the bottom of the tree rather than the first reach.
++- **`/compact`** compresses context within the current session; it does not create a new session. Use `/new` when a fresh session is actually required. The **default**, at the bottom of the tree rather than the first reach.
+ 
+ Read [PHASE-BOUNDARIES.md](PHASE-BOUNDARIES.md) for the ordered tree: the five questions, the reasoning behind each branch, and why the primary-source cost makes **Continue** the one to rule out first. Make the decision **at** a boundary; mid-phase, continue or split the rest into subagents.
+ 
+diff --git a/skills/engineering/code-review/SKILL.md b/skills/engineering/code-review/SKILL.md
+index 83183e0..fe625de 100644
+--- a/skills/engineering/code-review/SKILL.md
++++ b/skills/engineering/code-review/SKILL.md
+@@ -10,6 +10,8 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+ 
+ Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings. Start every sub-agent with a fresh context window.
+ 
++For Kimi Code, follow [the subagent adapter](../../../kimi-code/adapters/subagents.md): issue two foreground `Agent` calls together with `subagent_type: "coder"`, normally using `model: "primary"` for judgment-heavy review. Apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) when the fixed point or spec is missing.
++
+ The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
+ 
+ ## Process
+diff --git a/skills/engineering/codebase-design/DESIGN-IT-TWICE.md b/skills/engineering/codebase-design/DESIGN-IT-TWICE.md
+index aebdc9f..c4597d6 100644
+--- a/skills/engineering/codebase-design/DESIGN-IT-TWICE.md
++++ b/skills/engineering/codebase-design/DESIGN-IT-TWICE.md
+@@ -2,6 +2,8 @@
+ 
+ When the user wants to explore alternative interfaces for a chosen deepening candidate, use this parallel sub-agent pattern. Based on "Design It Twice" (Ousterhout): your first idea is unlikely to be the best.
+ 
++For Kimi Code, follow [the subagent adapter](../../../kimi-code/adapters/subagents.md): issue the independent foreground `Agent` calls together, using `plan` for read-only designs or `coder` when artifacts must be written.
++
+ Uses the vocabulary in [SKILL.md](SKILL.md): **module**, **interface**, **seam**, **adapter**, **leverage**.
+ 
+ ## Process
+diff --git a/skills/engineering/diagnosing-bugs/SKILL.md b/skills/engineering/diagnosing-bugs/SKILL.md
+index d039541..1dee4b8 100644
+--- a/skills/engineering/diagnosing-bugs/SKILL.md
++++ b/skills/engineering/diagnosing-bugs/SKILL.md
+@@ -26,7 +26,7 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
+ 1. **Failing test** at whatever seam reaches the bug: unit, integration, e2e.
+ 2. **Curl / HTTP script** against a running dev server.
+ 3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot.
+-4. **Headless browser script** (Playwright / Puppeteer) that drives the UI and asserts on DOM/console/network.
++4. **Headless browser script** (Playwright / Puppeteer) that drives the UI and asserts on DOM/console/network. Confirm the dependency in the project first. Do not assume a Playwright MCP server is installed. Try `kimi-webbridge:kimi-webbridge` after verifying its daemon and browser extension are ready. If WebBridge is unavailable, use the registered `chrome-devtools` MCP through `mcp__chrome-devtools__*`, loading its deferred tools when announced and confirming the connection in the current session. If neither browser path is available, choose a different feedback loop.
+ 5. **Replay a captured trace.** Save a real network request / payload / event log to disk; replay it through the code path in isolation.
+ 6. **Throwaway harness.** Spin up a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call.
+ 7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
+diff --git a/skills/engineering/grill-with-docs/SKILL.md b/skills/engineering/grill-with-docs/SKILL.md
+index 62b9efb..acea6c7 100644
+--- a/skills/engineering/grill-with-docs/SKILL.md
++++ b/skills/engineering/grill-with-docs/SKILL.md
+@@ -4,4 +4,4 @@ description: A relentless interview to sharpen a plan or design, which also crea
+ disable-model-invocation: true
+ ---
+ 
+-Call the Skill tool twice, for "grilling" and "domain-modeling".
++For Kimi Code, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md), then call the Skill tool twice, for "grilling" and "domain-modeling".
+diff --git a/skills/engineering/implement-spec/SKILL.md b/skills/engineering/implement-spec/SKILL.md
+index 73d36c2..781d83c 100644
+--- a/skills/engineering/implement-spec/SKILL.md
++++ b/skills/engineering/implement-spec/SKILL.md
+@@ -12,9 +12,9 @@ The goal is the entire spec implemented on a single **integration branch**, with
+ 
+ The tickets are not a list of steps. They are a **task graph** with blocking relationships between them. This means there is always a **frontier** of tickets which are ready to be grabbed.
+ 
+-Start every subagent with a fresh context window.
++Start every subagent with a fresh context window. For Kimi Code, follow [the subagent adapter](../../../kimi-code/adapters/subagents.md), [the worktree adapter](../../../kimi-code/adapters/worktrees.md), and [the interaction adapter](../../../kimi-code/adapters/interaction.md): use `coder` for implementers, mergers, and exploration that saves notes; run independent implementers with `run_in_background: true`.
+ 
+-Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
++Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, previous commits, and absolute worktree paths. Don't duplicate information already available via pointers.
+ 
+ **Implementer subagents** should be run in the background where possible for maximum concurrency.
+ 
+@@ -24,19 +24,20 @@ Communication to and from subagents should be sparse. Communicate primarily thro
+ 
+ 2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
+ 
+-3. Create the integration branch. If the issue tracker closes work through PRs, or the user asks for one, open a draft PR after the first merge in step 5 (a branch with no commits ahead of main can't open one), marked as closing the spec and tickets.
++3. Create the integration branch and its integration worktree, recording the absolute path. If the issue tracker closes work through PRs, or the user asks for one, open a draft PR after the first merge in step 5 (a branch with no commits ahead of main can't open one), marked as closing the spec and tickets.
+ 
+-4. Use a fresh **implementer subagent** for each ticket, each in its own worktree on its own branch. Each implementer subagent:
+-   - confirms its worktree is based on the integration branch before starting, and resets onto it if not;
++4. Use **implementer subagents** to implement each ticket. The main agent creates and assigns a separate absolute worktree path and branch to each implementer. Each implementer subagent:
++   - verifies its assigned branch, base commit, and clean status before editing; if the worktree is dirty or based on the wrong commit, it stops and reports instead of resetting or cleaning changes;
++   - uses absolute paths for file tools and sets `cwd` explicitly to its assigned worktree for every Bash call;
+    - calls the Skill tool with `tdd` to build the ticket;
+-   - merges the integration branch tip into its own branch before reporting done
++   - merges the integration branch tip into its own branch before reporting its branch, commit, and absolute worktree path
+ 
+-5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**.
++5. Once an **implementer subagent** completes, the main agent or one merger at a time serially merges its work into the integration worktree using the explicit integration `cwd`. Never race integration merges.
+ 
+-6. If this changes the **frontier** of available tickets, kick off more **implementer subagents** to work on the new tickets. This allows for maximum concurrency.
++6. If this changes the **frontier** of available tickets, kick off more **implementer subagents** with newly assigned worktrees. This allows for maximum concurrency without sharing a working directory.
+ 
+-7. Once all tickets are complete, call the Skill tool with `code-review` on the integration branch. Fix all issues raised by the code review in a single fresh **implementer subagent**.
++7. Once all tickets are complete, call the Skill tool with `code-review` on the integration branch from the integration worktree. Fix all issues raised by the code review in a single **implementer subagent** assigned to that worktree.
+ 
+ 8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
+ 
+-9. Clean up all **implementer subagent** worktrees.
++9. After the required checks pass and the work is merged or deliberately preserved, clean up all clean **implementer subagent** worktrees. Do not delete unmerged changes.
+diff --git a/skills/engineering/implement/SKILL.md b/skills/engineering/implement/SKILL.md
+index bd49e47..72ef519 100644
+--- a/skills/engineering/implement/SKILL.md
++++ b/skills/engineering/implement/SKILL.md
+@@ -6,7 +6,7 @@ disable-model-invocation: true
+ 
+ Implement the work described by the user in the spec or tickets.
+ 
+-If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, ask.
++If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md) instead of inventing an answer.
+ 
+ Call the Skill tool with "tdd" where possible, at pre-agreed seams.
+ 
+diff --git a/skills/engineering/improve-codebase-architecture/SKILL.md b/skills/engineering/improve-codebase-architecture/SKILL.md
+index f1eabb5..da0eda2 100644
+--- a/skills/engineering/improve-codebase-architecture/SKILL.md
++++ b/skills/engineering/improve-codebase-architecture/SKILL.md
+@@ -24,6 +24,8 @@ This command is _informed_ by the project's domain model and built on a shared d
+ 
+ Read the project's domain glossary (`GLOSSARY.md`) and any ADRs in the area you're touching first.
+ 
++For Kimi Code, use `Agent` with `subagent_type: "explore"` as described in [the subagent adapter](../../../kimi-code/adapters/subagents.md).
++
+ Then spawn a sub-agent with a fresh context window to walk the codebase. Don't follow rigid heuristics; explore organically and note where you experience friction:
+ 
+ - Where does understanding one concept require bouncing between many small modules?
+@@ -36,6 +38,8 @@ Apply the **deletion test** to anything you suspect is shallow: would deleting i
+ 
+ ### 2. Present candidates as an HTML report
+ 
++For Kimi Code, call the Skill tool with `modern-web-guidance:modern-web-guidance` before writing the report and apply its search-and-retrieve workflow. Apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) when asking which candidate to explore.
++
+ Write a self-contained HTML file to the OS temp directory so nothing lands in the repo. Resolve the temp dir from `$TMPDIR`, falling back to `/tmp` (or `%TEMP%` on Windows), and write to `<tmpdir>/architecture-review-<timestamp>.html` so each run gets a fresh file. Open it for the user (`xdg-open <path>` on Linux, `open <path>` on macOS, `start <path>` on Windows) and tell them the absolute path.
+ 
+ The report uses **Tailwind via CDN** for layout and styling, and **Mermaid via CDN** for diagrams where a graph/flow/sequence reliably communicates the structure. Mix Mermaid with hand-crafted CSS/SVG visuals: use Mermaid when relationships are graph-shaped (call graphs, dependencies, sequences), and hand-built divs/SVG when you want something more editorial (mass diagrams, cross-sections, collapse animations). Each candidate gets a **before/after visualisation**. Be visual.
+diff --git a/skills/engineering/prototype/SKILL.md b/skills/engineering/prototype/SKILL.md
+index a004450..b30726e 100644
+--- a/skills/engineering/prototype/SKILL.md
++++ b/skills/engineering/prototype/SKILL.md
+@@ -7,6 +7,8 @@ description: Build a throwaway prototype to answer a design question. Use when t
+ 
+ A prototype is **throwaway code that answers a question**. The question decides the shape.
+ 
++For Kimi Code, use [the interaction adapter](../../../kimi-code/adapters/interaction.md) for user questions, [the worktree adapter](../../../kimi-code/adapters/worktrees.md) for the capture branch, and call the Skill tool with `modern-web-guidance:modern-web-guidance` before implementing HTML, CSS, or client-side JS.
++
+ ## Pick a branch
+ 
+ Identify which question is being answered, using the user's prompt, the surrounding code, or by asking if the user is around:
+diff --git a/skills/engineering/research/SKILL.md b/skills/engineering/research/SKILL.md
+index ffc9eb8..0e6a420 100644
+--- a/skills/engineering/research/SKILL.md
++++ b/skills/engineering/research/SKILL.md
+@@ -5,6 +5,8 @@ description: Investigate a question against high-trust primary sources and captu
+ 
+ Spin up a **background agent** to do the research, so you keep working while it reads. Start it with a fresh context window.
+ 
++For Kimi Code, follow [the subagent adapter](../../../kimi-code/adapters/subagents.md): use `Agent` with `subagent_type: "coder"` and `run_in_background: true`, since this task writes a report. If already inside a subagent without `Agent`, perform the research inline instead of spawning another agent.
++
+ Its job:
+ 
+ 1. Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
+diff --git a/skills/engineering/retro/SKILL.md b/skills/engineering/retro/SKILL.md
+index 12149ac..a301d32 100644
+--- a/skills/engineering/retro/SKILL.md
++++ b/skills/engineering/retro/SKILL.md
+@@ -10,7 +10,7 @@ The user has asked for a **retrospective**. You are suggesting improvements to t
+ 
+ 1. Call the Skill tool with `writing-for-agents` for the writing style guide.
+ 
+-2. Read the primary sources for the session the user specifies. This may mean searching through session logs on this machine. If the user doesn't specify a session, default to the current one.
++2. Read the primary sources for the session the user specifies, defaulting to the current one. For Kimi Code, resolve the directory under `$KIMI_CODE_HOME/sessions` (default `~/.kimi-code/sessions`) and read `agents/main/wire.jsonl`, the complete main-agent communication record. Use `state.json` only for metadata such as title and timestamps, and read relevant `agents/agent-*/wire.jsonl` files when subagent behavior matters. Tool-result artifacts and task logs are supporting evidence, not a replacement for the wire record. Redact secrets and personal information before presenting findings, and do not inspect credential files.
+ 
+ 3. Look for candidates for improvement in these categories.
+ 
+diff --git a/skills/engineering/setup-matt-pocock-skills/SKILL.md b/skills/engineering/setup-matt-pocock-skills/SKILL.md
+index 2df0b07..336ec2d 100644
+--- a/skills/engineering/setup-matt-pocock-skills/SKILL.md
++++ b/skills/engineering/setup-matt-pocock-skills/SKILL.md
+@@ -12,7 +12,7 @@ Scaffold the per-repo configuration that the engineering skills assume:
+ - **Triage labels**: the strings used for the five canonical triage roles
+ - **Domain docs**: where `GLOSSARY.md` and ADRs live, and the consumer rules for reading them
+ 
+-This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write.
++This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write. For Kimi Code, apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) to each confirmation gate.
+ 
+ ## Process
+ 
+@@ -73,13 +73,13 @@ Let them edit before writing.
+ 
+ ### 4. Write
+ 
+-**Pick the file to edit:**
++**Pick the file to edit in Kimi Code:**
+ 
+-- If `CLAUDE.md` exists, edit it.
+-- Else if `AGENTS.md` exists, edit it.
+-- If neither exists, ask the user which one to create; don't pick for them.
++- If `AGENTS.md` exists, edit it.
++- Else if only `CLAUDE.md` exists, create `AGENTS.md` for Kimi Code and leave `CLAUDE.md` unchanged unless the user explicitly asks to maintain both.
++- If neither exists, create `AGENTS.md`.
+ 
+-Never create `AGENTS.md` when `CLAUDE.md` already exists (or vice versa); always edit the one that's already there.
++Do not duplicate an existing `## Agent skills` block or overwrite unrelated user content.
+ 
+ If an `## Agent skills` block already exists in the chosen file, update its contents in-place rather than appending a duplicate. Don't overwrite user edits to the surrounding sections.
+ 
+diff --git a/skills/engineering/to-tickets/SKILL.md b/skills/engineering/to-tickets/SKILL.md
+index 9b77a01..8a9b8d7 100644
+--- a/skills/engineering/to-tickets/SKILL.md
++++ b/skills/engineering/to-tickets/SKILL.md
+@@ -41,6 +41,8 @@ Give each ticket its **blocking edges**: the other tickets that must complete be
+ 
+ ### 4. Quiz the user
+ 
++For Kimi Code, apply [the interaction adapter](../../../kimi-code/adapters/interaction.md): Never Ask mode may produce a draft breakdown, but it must not claim approval or publish it.
++
+ Present the proposed breakdown as a numbered list. For each ticket, show:
+ 
+ - **Title**: short descriptive name
+diff --git a/skills/engineering/triage/SKILL.md b/skills/engineering/triage/SKILL.md
+index 3fd5617..06dea6e 100644
+--- a/skills/engineering/triage/SKILL.md
++++ b/skills/engineering/triage/SKILL.md
+@@ -44,6 +44,8 @@ These are canonical role names. The actual label strings used in the issue track
+ 
+ State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time; flag transitions that look unusual and ask before proceeding.
+ 
++For Kimi Code, apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) before waiting for direction, requesting maintainer decisions, or applying triage outcomes.
++
+ ## Invocation
+ 
+ The maintainer invokes `/triage` and describes what they want in natural language. Interpret the request and act. Examples:
+diff --git a/skills/engineering/wayfinder/SKILL.md b/skills/engineering/wayfinder/SKILL.md
+index 975d6bf..04df71d 100644
+--- a/skills/engineering/wayfinder/SKILL.md
++++ b/skills/engineering/wayfinder/SKILL.md
+@@ -6,6 +6,8 @@ disable-model-invocation: true
+ 
+ A loose idea has arrived, too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** on the repo's issue tracker, then works its **decision tickets** (questions whose resolution is a decision, not slices of a build to execute) one at a time until the route is clear.
+ 
++For Kimi Code, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md) for HITL decisions, [the subagent adapter](../../../kimi-code/adapters/subagents.md) for research tickets, and [the worktree adapter](../../../kimi-code/adapters/worktrees.md) for research branches. Research agents use `subagent_type: "coder"` and `run_in_background: true`, with fresh context and assigned absolute worktree paths.
++
+ The destination varies per effort, and naming it is the first act of charting: it shapes every ticket. It might be a spec to hand off and iterate on, a decision to lock before planning starts, or a change made in place like a data-structure migration. The map is domain-agnostic: engineering work, course content, whatever fits the shape.
+ 
+ ## Plan, don't do
+@@ -120,7 +122,7 @@ User invokes with a loose idea.
+ User invokes with a map (URL or number). A ticket is **optional**: without one, you pick the next decision, not the user.
+ 
+ 1. Load the **map**: the low-res view, not every ticket body.
+-2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
++2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work. For a local research worktree, the main agent commits the claim before dispatching the research subagent so its initial status is clean; an uncommitted claim is not an acceptable starting state.
+ 3. Resolve it as the type its `wayfinder:<type>` label names (see [Ticket Types](#ticket-types)). Read the label, not just the body: the body never states the type. **Zoom as needed**: fetch the full body of any related or closed ticket on demand; call the Skill tool for whichever skills the `## Notes` block names. If in doubt, call the Skill tool twice, for "grilling" and "domain-modeling".
+ 4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
+ 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals that a ticket (this one or another) sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
+diff --git a/skills/engineering/wizard/SKILL.md b/skills/engineering/wizard/SKILL.md
+index c4294ad..ed2bf36 100644
+--- a/skills/engineering/wizard/SKILL.md
++++ b/skills/engineering/wizard/SKILL.md
+@@ -15,12 +15,16 @@ A wizard is ephemeral by default: built for one run, saved to a scratch or `scri
+ 
+ ### 1. Scope the procedure
+ 
+-Work out every manual step the human must take and every value that gets captured along the way. Read the repo first, don't ask cold:
++For Kimi Code, apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) before confirmation and irreversible-action gates.
+ 
+-- For setup: `.env`, `.env.example`, `.env.*`, `README`, `docker-compose*`, framework config, and `.github/workflows/*` (every `secrets.*` / `vars.*` reference is a value the wizard must produce).
++Work out every manual step the human must take and every value that gets captured along the way. Inspect non-secret sources first:
++
++- For setup: `.env.example`, `README`, `docker-compose*`, framework config, and `.github/workflows/*` (every `secrets.*` / `vars.*` reference is a value the wizard must produce).
+ - For a migration or transition: the current state, the target state, and the irreversible actions between them.
+ 
+-Then show the user the ordered list of stages and the values each produces, and confirm: they may add, drop, or reorder.
++Do not read `.env` or other files containing live secret values. Use variable names from examples and CI references, not secret values. The human enters real values only when running the wizard locally, and the agent never echoes them.
++
++Then show the user the ordered list of stages and the values each produces, and confirm through the interaction adapter: they may add, drop, or reorder.
+ 
+ **Done when:** every stage is named in order, and for each captured value you know (a) where the human gets it, (b) where it's written (`.env`, a GitHub secret, both, or nowhere; some stages are pure actions), and (c) whether it's secret (hidden entry) or public.
+ 
+diff --git a/skills/productivity/grill-me/SKILL.md b/skills/productivity/grill-me/SKILL.md
+index 3947ff9..b4016f0 100644
+--- a/skills/productivity/grill-me/SKILL.md
++++ b/skills/productivity/grill-me/SKILL.md
+@@ -4,4 +4,4 @@ description: A relentless interview to sharpen a plan or design.
+ disable-model-invocation: true
+ ---
+ 
+-Call the Skill tool with "grilling".
++For Kimi Code, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md), then call the Skill tool with "grilling".
+diff --git a/skills/productivity/grilling/SKILL.md b/skills/productivity/grilling/SKILL.md
+index d2f09a1..8cc5e79 100644
+--- a/skills/productivity/grilling/SKILL.md
++++ b/skills/productivity/grilling/SKILL.md
+@@ -25,6 +25,8 @@ Word each question so "yes" accepts your recommended answer.
+ 
+ Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
+ 
++For Kimi Code, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md) for every interview round and use [the subagent adapter](../../../kimi-code/adapters/subagents.md) for fact-finding: normally `Agent` with `subagent_type: "explore"` and `run_in_background: true`.
++
+ Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent with a fresh context window to find it; don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report; ask the rest of the frontier now. The _decisions_ are the user's: put each to them and wait.
+ 
+ The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
+diff --git a/skills/productivity/handoff/SKILL.md b/skills/productivity/handoff/SKILL.md
+index a224edc..005f396 100644
+--- a/skills/productivity/handoff/SKILL.md
++++ b/skills/productivity/handoff/SKILL.md
+@@ -1,7 +1,7 @@
+ ---
+ name: handoff
+ description: Compact the current conversation into a handoff document for another agent to pick up.
+-argument-hint: "What will the next session be used for?"
++arguments: [purpose]
+ disable-model-invocation: true
+ ---
+ 
+diff --git a/skills/productivity/teach/SKILL.md b/skills/productivity/teach/SKILL.md
+index 493fa3b..1bd6233 100644
+--- a/skills/productivity/teach/SKILL.md
++++ b/skills/productivity/teach/SKILL.md
+@@ -2,7 +2,7 @@
+ name: teach
+ description: Teach the user a new skill or concept, within this workspace.
+ disable-model-invocation: true
+-argument-hint: "What would you like to learn about?"
++arguments: [topic]
+ ---
+ 
+ The user has asked you to teach them something. This is a stateful request - they intend to learn the topic over multiple sessions.
+@@ -44,6 +44,8 @@ Fluency can give the user an illusory sense of mastery, but storage strength is
+ - Spacing (distributing practice over time)
+ - Interleaving (mixing up different but related topics in practice - for skills practice only)
+ 
++For Kimi Code, follow [the interaction adapter](../../../kimi-code/adapters/interaction.md) for mission questions and confirmations. Before authoring HTML, CSS, or client-side JS, call the Skill tool with `modern-web-guidance:modern-web-guidance` and apply its search-and-retrieve workflow.
++
+ ## Lessons
+ 
+ A lesson is the main thing you produce: the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
+diff --git a/skills/productivity/to-questionnaire/SKILL.md b/skills/productivity/to-questionnaire/SKILL.md
+index dadd0c0..d403b73 100644
+--- a/skills/productivity/to-questionnaire/SKILL.md
++++ b/skills/productivity/to-questionnaire/SKILL.md
+@@ -6,7 +6,7 @@ disable-model-invocation: true
+ 
+ Turn something the user can't answer alone into a **questionnaire**: a Markdown document they hand to one person to fill in async, or fill out together over a meeting. The recipient holds knowledge the user lacks; the questionnaire pulls it out of them.
+ 
+-**Grill the send, not the subject.** Interview the user only about the _send_, which they can always answer: who it goes to, and what they need back. The questions in the document then target the **gap** between what the recipient knows and what the user needs.
++**Grill the send, not the subject.** Interview the user only about the _send_, which they can always answer: who it goes to, and what they need back. The questions in the document then target the **gap** between what the recipient knows and what the user needs. For Kimi Code, apply [the interaction adapter](../../../kimi-code/adapters/interaction.md) to both exchanges.
+ 
+ 
+ 1. **Who is it going to?** Ask, in one exchange, the recipient's role, expertise, and relationship to the user. This fixes the questionnaire's tone and how much context it must carry. Done when you know who the recipient is and what they know that the user doesn't.
+diff --git a/skills/productivity/writing-for-agents/SKILL-MECHANICS.md b/skills/productivity/writing-for-agents/SKILL-MECHANICS.md
+index 9cdbdb2..d52b716 100644
+--- a/skills/productivity/writing-for-agents/SKILL-MECHANICS.md
++++ b/skills/productivity/writing-for-agents/SKILL-MECHANICS.md
+@@ -20,3 +20,13 @@ The invocation cut of splitting (the sequence cut lives in `SKILL.md`): split of
+ ## Router skills
+ 
+ When user-invoked skills multiply past what you can remember, that piled-up cognitive load is cured by a **router skill**: one user-invoked skill that names the others and when to reach for each, so the human has one skill to remember instead of many. It can only hint, never fire them: user-invoked skills have no description, so nothing but the human can reach them.
++
++## Kimi Code mechanics
++
++- Directory-form skills require both `name` and `description` in frontmatter. Keep `description` present even for user-invoked skills; Kimi uses it for the human-facing catalog but blocks automatic model invocation when requested.
++- Use `disableModelInvocation: true` for user-invoked skills. The upstream `disable-model-invocation` spelling is also accepted.
++- Use `arguments: [topic]` or another short list of named parameters instead of `argument-hint`. `$ARGUMENTS`, `$0`, `$1`, and `$<name>` are available; when the body has no argument placeholders, Kimi appends the raw arguments automatically.
++- Use `${KIMI_SKILL_DIR}` for the current skill directory. Invoke skills with `/skill:<name>`; `/<name>` is a shorthand when it does not conflict with another command.
++- `agents/openai.yaml` and Claude-specific `argument-hint` metadata are not Kimi configuration. Do not rely on them to control Kimi invocation.
++- Use the native `Skill` tool when one model-invocable inline skill calls another. Kimi rejects skills with `disableModelInvocation: true` through this tool; those remain available to the human through `/skill:<name>`.
++- For subagents, follow [the Kimi subagent adapter](../../../kimi-code/adapters/subagents.md). For independent branches use [the worktree adapter](../../../kimi-code/adapters/worktrees.md), and for interviews or approval gates use [the interaction adapter](../../../kimi-code/adapters/interaction.md).
